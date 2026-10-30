@@ -7,7 +7,13 @@ import WebKit
 /// Implementation of `WKScriptMessageHandler` that calls to Dart in callback methods.
 class ScriptMessageHandlerImpl: NSObject, WKScriptMessageHandler {
   let api: PigeonApiProtocolWKScriptMessageHandler
-  unowned let registrar: ProxyAPIRegistrar
+  // Fix(kitar): WKUserContentController retains this handler beyond ProxyAPIRegistrar
+  // teardown (applicationWillTerminate / sceneDidDisconnect), and the original
+  // `unowned` aborted on the next late script message. Use a weak reference and drop
+  // late messages instead.
+  // https://github.com/flutter/flutter/issues/192975
+  // https://github.com/flutter/flutter/issues/194340
+  weak var registrar: ProxyAPIRegistrar?
 
   init(api: PigeonApiProtocolWKScriptMessageHandler, registrar: ProxyAPIRegistrar) {
     self.api = api
@@ -17,6 +23,9 @@ class ScriptMessageHandlerImpl: NSObject, WKScriptMessageHandler {
   func userContentController(
     _ userContentController: WKUserContentController, didReceive message: WKScriptMessage
   ) {
+    // Fix(kitar): Messages arriving after teardown have nowhere to deliver; dropping
+    // them matches the intent of `ignoreCallsToDart`.
+    guard let registrar else { return }
     registrar.dispatchOnMainThread { onFailure in
       self.api.didReceiveScriptMessage(
         pigeonInstance: self, controller: userContentController, message: message

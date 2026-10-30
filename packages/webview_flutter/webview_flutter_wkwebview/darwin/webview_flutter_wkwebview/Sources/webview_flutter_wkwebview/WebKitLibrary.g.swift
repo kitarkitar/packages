@@ -660,10 +660,15 @@ open class WebKitLibraryPigeonProxyApiRegistrar {
   }
 }
 private class WebKitLibraryPigeonInternalProxyApiCodecReaderWriter: FlutterStandardReaderWriter {
-  unowned let pigeonRegistrar: WebKitLibraryPigeonProxyApiRegistrar
+  // Fix(kitar): This codec singleton outlives ProxyAPIRegistrar teardown, and the
+  // original `unowned` aborted when a late reply was encoded/decoded after teardown.
+  // https://github.com/flutter/flutter/issues/192975
+  weak var pigeonRegistrar: WebKitLibraryPigeonProxyApiRegistrar
 
   private class WebKitLibraryPigeonInternalProxyApiCodecReader: WebKitLibraryPigeonCodecReader {
-    unowned let pigeonRegistrar: WebKitLibraryPigeonProxyApiRegistrar
+    // Fix(kitar): Strong for the duration of a single decode; removes the residual
+    // mid-read teardown race once the outer reference is weak.
+    let pigeonRegistrar: WebKitLibraryPigeonProxyApiRegistrar
 
     init(data: Data, pigeonRegistrar: WebKitLibraryPigeonProxyApiRegistrar) {
       self.pigeonRegistrar = pigeonRegistrar
@@ -687,7 +692,9 @@ private class WebKitLibraryPigeonInternalProxyApiCodecReaderWriter: FlutterStand
   }
 
   private class WebKitLibraryPigeonInternalProxyApiCodecWriter: WebKitLibraryPigeonCodecWriter {
-    unowned let pigeonRegistrar: WebKitLibraryPigeonProxyApiRegistrar
+    // Fix(kitar): Strong for the duration of a single encode; removes the residual
+    // mid-write teardown race once the outer reference is weak.
+    let pigeonRegistrar: WebKitLibraryPigeonProxyApiRegistrar
 
     init(data: NSMutableData, pigeonRegistrar: WebKitLibraryPigeonProxyApiRegistrar) {
       self.pigeonRegistrar = pigeonRegistrar
@@ -1144,11 +1151,17 @@ private class WebKitLibraryPigeonInternalProxyApiCodecReaderWriter: FlutterStand
   }
 
   override func reader(with data: Data) -> FlutterStandardReader {
+    // Fix(kitar): After teardown, proxy instances can no longer be resolved; fall back
+    // to the base reader so late decodes (which have nowhere to deliver) don't crash.
+    guard let pigeonRegistrar else { return WebKitLibraryPigeonCodecReader(data: data) }
     return WebKitLibraryPigeonInternalProxyApiCodecReader(
       data: data, pigeonRegistrar: pigeonRegistrar)
   }
 
   override func writer(with data: NSMutableData) -> FlutterStandardWriter {
+    // Fix(kitar): After teardown, fall back to the base writer so late reply encodes
+    // don't crash.
+    guard let pigeonRegistrar else { return WebKitLibraryPigeonCodecWriter(data: data) }
     return WebKitLibraryPigeonInternalProxyApiCodecWriter(
       data: data, pigeonRegistrar: pigeonRegistrar)
   }

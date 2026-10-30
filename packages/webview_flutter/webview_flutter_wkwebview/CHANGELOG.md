@@ -1,3 +1,10 @@
+## 3.25.2
+
+* Fixes an abort when a late script message arrives or a codec encodes/decodes a
+  reply after `ProxyAPIRegistrar` teardown: `ScriptMessageHandlerImpl` and the
+  internal proxy-api codec reader/writer now hold the registrar weakly and drop the
+  late work instead of dereferencing a dangling `unowned` reference.
+
 ## 3.25.1
 
 * Relands update to prevent message calls when application will terminate.
