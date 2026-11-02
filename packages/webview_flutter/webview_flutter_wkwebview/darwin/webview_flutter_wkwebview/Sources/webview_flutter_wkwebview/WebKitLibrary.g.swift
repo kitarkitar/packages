@@ -662,8 +662,9 @@ open class WebKitLibraryPigeonProxyApiRegistrar {
 private class WebKitLibraryPigeonInternalProxyApiCodecReaderWriter: FlutterStandardReaderWriter {
   // Fix(kitar): This codec singleton outlives ProxyAPIRegistrar teardown, and the
   // original `unowned` aborted when a late reply was encoded/decoded after teardown.
+  // The type must be explicitly optional: newer Swift rejects a non-optional weak var.
   // https://github.com/flutter/flutter/issues/192975
-  weak var pigeonRegistrar: WebKitLibraryPigeonProxyApiRegistrar
+  weak var pigeonRegistrar: WebKitLibraryPigeonProxyApiRegistrar?
 
   private class WebKitLibraryPigeonInternalProxyApiCodecReader: WebKitLibraryPigeonCodecReader {
     // Fix(kitar): Strong for the duration of a single decode; removes the residual

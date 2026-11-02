@@ -11,6 +11,8 @@
 * Moves the NSNull reply check and the one-shot WK navigation/auth completion
   fallback into this package. Both follow `KitarWebviewProtection.isEnabled`
   (Remote Config `ios_webview_protection`). There is no host-app patch script.
+* Declares the codec registrar as an explicit optional `weak var`. Newer Swift
+  compilers reject a non-optional weak reference, which failed the iOS archive.
 
 ## 3.25.2
 
