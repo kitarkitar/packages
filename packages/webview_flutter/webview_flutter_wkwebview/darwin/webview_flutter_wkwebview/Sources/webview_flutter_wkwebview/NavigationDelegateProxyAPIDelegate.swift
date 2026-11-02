@@ -4,6 +4,37 @@
 
 import WebKit
 
+/// Remote Config `ios_webview_protection`。false 时 NSNull 判断、completion 补调、
+/// scene 断开保留 registrar 都回到插件原始行为。
+public enum KitarWebviewProtection {
+  public static var isEnabled = true
+}
+
+/// 最多调用一次的 completion。释放时仍未回调则补一次安全默认值，
+/// 避免引擎 destroyContext 丢掉 WK completion 后 WebKit abort。
+final class KitarOnceCompletion<T> {
+  private var handler: ((T) -> Void)?
+  private let fallback: T
+
+  init(_ handler: @escaping (T) -> Void, fallback: T) {
+    self.handler = handler
+    self.fallback = fallback
+  }
+
+  func call(_ value: T) {
+    guard let handler else { return }
+    self.handler = nil
+    handler(value)
+  }
+
+  deinit {
+    guard let handler else { return }
+    self.handler = nil
+    NSLog("KitarOnceCompletion fallback invoked")
+    handler(fallback)
+  }
+}
+
 /// Implementation of `WKNavigationDelegate` that calls to Dart in callback methods.
 public class NavigationDelegateImpl: NSObject, WKNavigationDelegate {
   let api: PigeonApiProtocolWKNavigationDelegate
@@ -83,6 +114,15 @@ public class NavigationDelegateImpl: NSObject, WKNavigationDelegate {
       _ webView: WKWebView, decidePolicyFor navigationAction: WebKit.WKNavigationAction,
       decisionHandler: @escaping @MainActor (WebKit.WKNavigationActionPolicy) -> Void
     ) {
+      // Fix(kitar): 参数标签属于 ObjC selector，不可改名。引擎销毁丢掉回包时补 cancel。
+      let kitarDecision: @MainActor (WebKit.WKNavigationActionPolicy) -> Void
+      if KitarWebviewProtection.isEnabled {
+        let kitarBox = KitarOnceCompletion(
+          decisionHandler, fallback: WebKit.WKNavigationActionPolicy.cancel)
+        kitarDecision = { kitarBox.call($0) }
+      } else {
+        kitarDecision = decisionHandler
+      }
       registrar.dispatchOnMainThread { onFailure in
         self.api.decidePolicyForNavigationAction(
           pigeonInstance: self, webView: webView, navigationAction: navigationAction
@@ -92,14 +132,14 @@ public class NavigationDelegateImpl: NSObject, WKNavigationDelegate {
             case .success(let policy):
               switch policy {
               case .allow:
-                decisionHandler(.allow)
+                kitarDecision(.allow)
               case .cancel:
-                decisionHandler(.cancel)
+                kitarDecision(.cancel)
               case .download:
                 if #available(iOS 14.5, macOS 11.3, *) {
-                  decisionHandler(.download)
+                  kitarDecision(.download)
                 } else {
-                  decisionHandler(.cancel)
+                  kitarDecision(.cancel)
                   assertionFailure(
                     self.registrar.createUnsupportedVersionMessage(
                       "WKNavigationActionPolicy.download",
@@ -108,7 +148,7 @@ public class NavigationDelegateImpl: NSObject, WKNavigationDelegate {
                 }
               }
             case .failure(let error):
-              decisionHandler(.cancel)
+              kitarDecision(.cancel)
               onFailure("WKNavigationDelegate.decidePolicyForNavigationAction", error)
             }
           }
@@ -120,6 +160,15 @@ public class NavigationDelegateImpl: NSObject, WKNavigationDelegate {
       _ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
       decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
     ) {
+      // Fix(kitar): 参数标签属于 ObjC selector，不可改名。引擎销毁丢掉回包时补 cancel。
+      let kitarDecision: (WKNavigationActionPolicy) -> Void
+      if KitarWebviewProtection.isEnabled {
+        let kitarBox = KitarOnceCompletion(
+          decisionHandler, fallback: WKNavigationActionPolicy.cancel)
+        kitarDecision = { kitarBox.call($0) }
+      } else {
+        kitarDecision = decisionHandler
+      }
       registrar.dispatchOnMainThread { onFailure in
         self.api.decidePolicyForNavigationAction(
           pigeonInstance: self, webView: webView, navigationAction: navigationAction
@@ -129,14 +178,14 @@ public class NavigationDelegateImpl: NSObject, WKNavigationDelegate {
             case .success(let policy):
               switch policy {
               case .allow:
-                decisionHandler(.allow)
+                kitarDecision(.allow)
               case .cancel:
-                decisionHandler(.cancel)
+                kitarDecision(.cancel)
               case .download:
                 if #available(iOS 14.5, macOS 11.3, *) {
-                  decisionHandler(.download)
+                  kitarDecision(.download)
                 } else {
-                  decisionHandler(.cancel)
+                  kitarDecision(.cancel)
                   assertionFailure(
                     self.registrar.createUnsupportedVersionMessage(
                       "WKNavigationActionPolicy.download",
@@ -145,7 +194,7 @@ public class NavigationDelegateImpl: NSObject, WKNavigationDelegate {
                 }
               }
             case .failure(let error):
-              decisionHandler(.cancel)
+              kitarDecision(.cancel)
               onFailure("WKNavigationDelegate.decidePolicyForNavigationAction", error)
             }
           }
@@ -159,6 +208,15 @@ public class NavigationDelegateImpl: NSObject, WKNavigationDelegate {
       _ webView: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse,
       decisionHandler: @escaping @MainActor (WKNavigationResponsePolicy) -> Void
     ) {
+      // Fix(kitar): 参数标签属于 ObjC selector，不可改名。引擎销毁丢掉回包时补 cancel。
+      let kitarDecision: @MainActor (WKNavigationResponsePolicy) -> Void
+      if KitarWebviewProtection.isEnabled {
+        let kitarBox = KitarOnceCompletion(
+          decisionHandler, fallback: WKNavigationResponsePolicy.cancel)
+        kitarDecision = { kitarBox.call($0) }
+      } else {
+        kitarDecision = decisionHandler
+      }
       registrar.dispatchOnMainThread { onFailure in
         self.api.decidePolicyForNavigationResponse(
           pigeonInstance: self, webView: webView, navigationResponse: navigationResponse
@@ -168,14 +226,14 @@ public class NavigationDelegateImpl: NSObject, WKNavigationDelegate {
             case .success(let policy):
               switch policy {
               case .allow:
-                decisionHandler(.allow)
+                kitarDecision(.allow)
               case .cancel:
-                decisionHandler(.cancel)
+                kitarDecision(.cancel)
               case .download:
                 if #available(iOS 14.5, macOS 11.3, *) {
-                  decisionHandler(.download)
+                  kitarDecision(.download)
                 } else {
-                  decisionHandler(.cancel)
+                  kitarDecision(.cancel)
                   assertionFailure(
                     self.registrar.createUnsupportedVersionMessage(
                       "WKNavigationResponsePolicy.download",
@@ -184,7 +242,7 @@ public class NavigationDelegateImpl: NSObject, WKNavigationDelegate {
                 }
               }
             case .failure(let error):
-              decisionHandler(.cancel)
+              kitarDecision(.cancel)
               onFailure("WKNavigationDelegate.decidePolicyForNavigationResponse", error)
             }
           }
@@ -196,6 +254,15 @@ public class NavigationDelegateImpl: NSObject, WKNavigationDelegate {
       _ webView: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse,
       decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void
     ) {
+      // Fix(kitar): 参数标签属于 ObjC selector，不可改名。引擎销毁丢掉回包时补 cancel。
+      let kitarDecision: (WKNavigationResponsePolicy) -> Void
+      if KitarWebviewProtection.isEnabled {
+        let kitarBox = KitarOnceCompletion(
+          decisionHandler, fallback: WKNavigationResponsePolicy.cancel)
+        kitarDecision = { kitarBox.call($0) }
+      } else {
+        kitarDecision = decisionHandler
+      }
       registrar.dispatchOnMainThread { onFailure in
         self.api.decidePolicyForNavigationResponse(
           pigeonInstance: self, webView: webView, navigationResponse: navigationResponse
@@ -205,14 +272,14 @@ public class NavigationDelegateImpl: NSObject, WKNavigationDelegate {
             case .success(let policy):
               switch policy {
               case .allow:
-                decisionHandler(.allow)
+                kitarDecision(.allow)
               case .cancel:
-                decisionHandler(.cancel)
+                kitarDecision(.cancel)
               case .download:
                 if #available(iOS 14.5, macOS 11.3, *) {
-                  decisionHandler(.download)
+                  kitarDecision(.download)
                 } else {
-                  decisionHandler(.cancel)
+                  kitarDecision(.cancel)
                   assertionFailure(
                     self.registrar.createUnsupportedVersionMessage(
                       "WKNavigationResponsePolicy.download",
@@ -221,7 +288,7 @@ public class NavigationDelegateImpl: NSObject, WKNavigationDelegate {
                 }
               }
             case .failure(let error):
-              decisionHandler(.cancel)
+              kitarDecision(.cancel)
               onFailure("WKNavigationDelegate.decidePolicyForNavigationResponse", error)
             }
           }
@@ -238,6 +305,18 @@ public class NavigationDelegateImpl: NSObject, WKNavigationDelegate {
         ->
         Void
     ) {
+      // Fix(kitar): 参数标签属于 ObjC selector，不可改名。引擎销毁丢掉回包时补 cancel。
+      let kitarCompletion: @MainActor (URLSession.AuthChallengeDisposition, URLCredential?) -> Void
+      if KitarWebviewProtection.isEnabled {
+        let kitarAuthBox = KitarOnceCompletion<(URLSession.AuthChallengeDisposition, URLCredential?)>(
+          { disposition, credential in completionHandler(disposition, credential) },
+          fallback: (.cancelAuthenticationChallenge, nil))
+        kitarCompletion = { disposition, credential in
+          kitarAuthBox.call((disposition, credential))
+        }
+      } else {
+        kitarCompletion = completionHandler
+      }
       registrar.dispatchOnMainThread { onFailure in
         self.api.didReceiveAuthenticationChallenge(
           pigeonInstance: self, webView: webView, challenge: challenge
@@ -245,9 +324,15 @@ public class NavigationDelegateImpl: NSObject, WKNavigationDelegate {
           DispatchQueue.main.async {
             switch result {
             case .success(let response):
-              completionHandler(response.disposition, response.credential)
+              kitarCompletion(response.disposition, response.credential)
             case .failure(let error):
-              completionHandler(.cancelAuthenticationChallenge, nil)
+              // Fix(kitar): 实例丢失（null-error）时走 performDefaultHandling，
+              // cancel 会让直播 HTTPS 页打不开。保护关闭时保持原始 cancel。
+              if KitarWebviewProtection.isEnabled && error.code == "null-error" {
+                kitarCompletion(.performDefaultHandling, nil)
+              } else {
+                kitarCompletion(.cancelAuthenticationChallenge, nil)
+              }
               onFailure("WKNavigationDelegate.didReceiveAuthenticationChallenge", error)
             }
           }
@@ -261,6 +346,18 @@ public class NavigationDelegateImpl: NSObject, WKNavigationDelegate {
         @escaping (URLSession.AuthChallengeDisposition, URLCredential?) ->
         Void
     ) {
+      // Fix(kitar): 参数标签属于 ObjC selector，不可改名。引擎销毁丢掉回包时补 cancel。
+      let kitarCompletion: (URLSession.AuthChallengeDisposition, URLCredential?) -> Void
+      if KitarWebviewProtection.isEnabled {
+        let kitarAuthBox = KitarOnceCompletion<(URLSession.AuthChallengeDisposition, URLCredential?)>(
+          { disposition, credential in completionHandler(disposition, credential) },
+          fallback: (.cancelAuthenticationChallenge, nil))
+        kitarCompletion = { disposition, credential in
+          kitarAuthBox.call((disposition, credential))
+        }
+      } else {
+        kitarCompletion = completionHandler
+      }
       registrar.dispatchOnMainThread { onFailure in
         self.api.didReceiveAuthenticationChallenge(
           pigeonInstance: self, webView: webView, challenge: challenge
@@ -268,9 +365,15 @@ public class NavigationDelegateImpl: NSObject, WKNavigationDelegate {
           DispatchQueue.main.async {
             switch result {
             case .success(let response):
-              completionHandler(response.disposition, response.credential)
+              kitarCompletion(response.disposition, response.credential)
             case .failure(let error):
-              completionHandler(.cancelAuthenticationChallenge, nil)
+              // Fix(kitar): 实例丢失（null-error）时走 performDefaultHandling，
+              // cancel 会让直播 HTTPS 页打不开。保护关闭时保持原始 cancel。
+              if KitarWebviewProtection.isEnabled && error.code == "null-error" {
+                kitarCompletion(.performDefaultHandling, nil)
+              } else {
+                kitarCompletion(.cancelAuthenticationChallenge, nil)
+              }
               onFailure("WKNavigationDelegate.didReceiveAuthenticationChallenge", error)
             }
           }

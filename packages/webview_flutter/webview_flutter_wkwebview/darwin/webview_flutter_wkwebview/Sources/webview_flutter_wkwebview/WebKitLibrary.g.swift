@@ -4433,7 +4433,8 @@ final class PigeonApiWKNavigationDelegate: PigeonApiProtocolWKNavigationDelegate
         let message: String? = nilOrValue(listResponse[1])
         let details: String? = nilOrValue(listResponse[2])
         completion(.failure(PigeonError(code: code, message: message, details: details)))
-      } else if listResponse[0] == nil {
+      } else if listResponse[0] == nil || (KitarWebviewProtection.isEnabled && listResponse[0] is NSNull) {
+        // Fix(kitar): codec 把 list 内 null 编成 NSNull，只判 == nil 会 as! abort。
         completion(
           .failure(
             PigeonError(
@@ -4487,7 +4488,8 @@ final class PigeonApiWKNavigationDelegate: PigeonApiProtocolWKNavigationDelegate
         let message: String? = nilOrValue(listResponse[1])
         let details: String? = nilOrValue(listResponse[2])
         completion(.failure(PigeonError(code: code, message: message, details: details)))
-      } else if listResponse[0] == nil {
+      } else if listResponse[0] == nil || (KitarWebviewProtection.isEnabled && listResponse[0] is NSNull) {
+        // Fix(kitar): codec 把 list 内 null 编成 NSNull，只判 == nil 会 as! abort。
         completion(
           .failure(
             PigeonError(
@@ -4672,7 +4674,8 @@ final class PigeonApiWKNavigationDelegate: PigeonApiProtocolWKNavigationDelegate
         let message: String? = nilOrValue(listResponse[1])
         let details: String? = nilOrValue(listResponse[2])
         completion(.failure(PigeonError(code: code, message: message, details: details)))
-      } else if listResponse[0] == nil {
+      } else if listResponse[0] == nil || (KitarWebviewProtection.isEnabled && listResponse[0] is NSNull) {
+        // Fix(kitar): codec 把 list 内 null 编成 NSNull，只判 == nil 会 as! abort。
         completion(
           .failure(
             PigeonError(
@@ -6460,7 +6463,8 @@ final class PigeonApiWKUIDelegate: PigeonApiProtocolWKUIDelegate {
         let message: String? = nilOrValue(listResponse[1])
         let details: String? = nilOrValue(listResponse[2])
         completion(.failure(PigeonError(code: code, message: message, details: details)))
-      } else if listResponse[0] == nil {
+      } else if listResponse[0] == nil || (KitarWebviewProtection.isEnabled && listResponse[0] is NSNull) {
+        // Fix(kitar): codec 把 list 内 null 编成 NSNull，只判 == nil 会 as! abort。
         completion(
           .failure(
             PigeonError(
@@ -6559,7 +6563,8 @@ final class PigeonApiWKUIDelegate: PigeonApiProtocolWKUIDelegate {
         let message: String? = nilOrValue(listResponse[1])
         let details: String? = nilOrValue(listResponse[2])
         completion(.failure(PigeonError(code: code, message: message, details: details)))
-      } else if listResponse[0] == nil {
+      } else if listResponse[0] == nil || (KitarWebviewProtection.isEnabled && listResponse[0] is NSNull) {
+        // Fix(kitar): codec 把 list 内 null 编成 NSNull，只判 == nil 会 as! abort。
         completion(
           .failure(
             PigeonError(

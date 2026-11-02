@@ -1,3 +1,17 @@
+## 3.25.3
+
+* Keeps `ProxyAPIRegistrar` alive across `sceneDidDisconnect` when
+  `WebViewFlutterPlugin.retainRegistrarOnSceneDisconnect` is true (the default).
+  UIKit can disconnect a scene while the process is still backgrounded and
+  WKWebView is still in the tree. Tearing the registrar down there aborts on a
+  dangling `unowned` reference, or drops late script messages after the weak
+  guard, and the plugin never recreates the registrar for the next foreground.
+  Set the flag to false to restore the upstream teardown. `detachFromEngine` and
+  `applicationWillTerminate` still tear the registrar down.
+* Moves the NSNull reply check and the one-shot WK navigation/auth completion
+  fallback into this package. Both follow `KitarWebviewProtection.isEnabled`
+  (Remote Config `ios_webview_protection`). There is no host-app patch script.
+
 ## 3.25.2
 
 * Fixes an abort when a late script message arrives or a codec encodes/decodes a

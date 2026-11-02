@@ -43,7 +43,23 @@ class WebViewFlutterPluginTests: XCTestCase {
       waitForExpectations(timeout: 5.0)
     }
 
-    func testInstanceManagerIsDeallocatedInSceneDidDisconnect() {
+    func testSceneDidDisconnectKeepsRegistrarWhenRetentionEnabled() {
+      WebViewFlutterPlugin.retainRegistrarOnSceneDisconnect = true
+      let plugin = WebViewFlutterPlugin(binaryMessenger: TestBinaryMessenger())
+      plugin.proxyApiRegistrar!.setUp()
+
+      let scene = UIApplication.shared.connectedScenes.first!
+      (plugin as FlutterSceneLifeCycleDelegate).sceneDidDisconnect?(scene)
+
+      // Fix(kitar): 后台 scene 断开不能拆掉仍被 WKWebView 使用的 registrar。
+      XCTAssertNotNil(plugin.proxyApiRegistrar)
+    }
+
+    func testInstanceManagerIsDeallocatedInSceneDidDisconnectWhenRetentionDisabled() {
+      // Fix(kitar): ios_webview_protection 关闭时恢复上游拆解，测试锁住这条回滚路径。
+      WebViewFlutterPlugin.retainRegistrarOnSceneDisconnect = false
+      defer { WebViewFlutterPlugin.retainRegistrarOnSceneDisconnect = true }
+
       let plugin = WebViewFlutterPlugin(binaryMessenger: TestBinaryMessenger())
       plugin.proxyApiRegistrar!.setUp()
 

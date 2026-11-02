@@ -11,6 +11,17 @@
 #endif
 
 public class WebViewFlutterPlugin: NSObject, FlutterPlugin {
+  /// Fix(kitar): 后台 scene 断开时默认不拆 registrar。
+  ///
+  /// UIKit 可以在进程仍处于后台、Flutter 引擎和 WKWebView 都还在树上时回调
+  /// `sceneDidDisconnect`。这里拆掉 registrar 后，插件不会在 scene 重连时重建它，
+  /// 迟到的 JSB / `evaluateJavaScript` 回包要么打到已销毁的 unowned（abort），
+  /// 要么被 weak 早退丢掉，直播页回到前台也收不到消息。
+  /// 真正结束插件生命周期的是 `detachFromEngine` 和 `applicationWillTerminate`。
+  /// App 用 Remote Config `ios_webview_protection` 写入本开关；false 时恢复上游拆解。
+  /// Crashlytics c1f6d36aeb7c105a32015504776adff5。
+  public static var retainRegistrarOnSceneDisconnect = true
+
   var proxyApiRegistrar: ProxyAPIRegistrar?
 
   init(binaryMessenger: FlutterBinaryMessenger) {
@@ -57,7 +68,12 @@ public class WebViewFlutterPlugin: NSObject, FlutterPlugin {
       tearDownProxyAPIRegistrar()
     }
 
-    public func sceneDidDisconnect(_ scene: UIScene) {
+    public func sceneDidDisconnect(_: UIScene) {
+      // Fix(kitar): 见 retainRegistrarOnSceneDisconnect。保护开启时保留 registrar，
+      // 让仍在树上的 WebView 继续收 JSB；关闭时走上游拆解，便于远程回滚。
+      guard !WebViewFlutterPlugin.retainRegistrarOnSceneDisconnect else {
+        return
+      }
       tearDownProxyAPIRegistrar()
     }
   }

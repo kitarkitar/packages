@@ -8,9 +8,10 @@ import WebKit
 class ScriptMessageHandlerImpl: NSObject, WKScriptMessageHandler {
   let api: PigeonApiProtocolWKScriptMessageHandler
   // Fix(kitar): WKUserContentController retains this handler beyond ProxyAPIRegistrar
-  // teardown (applicationWillTerminate / sceneDidDisconnect), and the original
-  // `unowned` aborted on the next late script message. Use a weak reference and drop
-  // late messages instead.
+  // teardown (detachFromEngine / applicationWillTerminate). sceneDidDisconnect no
+  // longer tears the registrar down while retainRegistrarOnSceneDisconnect is true.
+  // The original `unowned` aborted on the next late script message. Use a weak
+  // reference and drop late messages that arrive after a real teardown.
   // https://github.com/flutter/flutter/issues/192975
   // https://github.com/flutter/flutter/issues/194340
   weak var registrar: ProxyAPIRegistrar?
