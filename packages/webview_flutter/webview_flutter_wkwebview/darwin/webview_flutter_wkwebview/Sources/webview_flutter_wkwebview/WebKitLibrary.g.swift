@@ -554,6 +554,12 @@ open class WebKitLibraryPigeonProxyApiRegistrar {
     }
 
     public func onDeinit(identifier: Int64) {
+      // Fix(kitar): 引擎 teardown 期间（scene 断开 / 应用终止 / detach）FlutterEngine 的
+      // shell 已无效，发送 removeStrongReference 会触发 sendOnChannel 断言 abort
+      // （flutter/flutter#168535）。跳过发送，丢消息而不是崩进程。
+      guard !WebViewFlutterPlugin.isEngineTeardownImminent else {
+        return
+      }
       api.removeStrongReference(identifier: identifier) {
         _ in
       }

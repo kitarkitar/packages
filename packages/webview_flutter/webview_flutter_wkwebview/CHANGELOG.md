@@ -13,6 +13,13 @@
   (Remote Config `ios_webview_protection`). There is no host-app patch script.
 * Declares the codec registrar as an explicit optional `weak var`. Newer Swift
   compilers reject a non-optional weak reference, which failed the iOS archive.
+* Skips the instance-manager finalizer's `removeStrongReference` send once
+  engine teardown is imminent (`sceneDidDisconnect`, `applicationWillTerminate`,
+  or `detachFromEngine`; reset on `sceneDidBecomeActive`). During engine
+  teardown the last strong reference to a platform-view `WKWebView` can be
+  released by the engine itself, and the finalizer's send then hits the
+  `FlutterEngine sendOnChannel` assertion. See
+  https://github.com/flutter/flutter/issues/168535.
 
 ## 3.25.2
 

@@ -22,6 +22,17 @@ public class WebViewFlutterPlugin: NSObject, FlutterPlugin {
   /// Crashlytics c1f6d36aeb7c105a32015504776adff5。
   public static var retainRegistrarOnSceneDisconnect = true
 
+  /// Fix(kitar): scene 断开 / 应用终止 / 引擎 detach 之后，FlutterEngine 的 shell 随时会被
+  /// `destroyContext` 置空。此时仍在树上的 WKWebView 被 PlatformViewsController 释放，pigeon
+  /// finalizer 的 `removeStrongReference` 走 sendOnChannel 会命中引擎断言
+  /// "Sending a message before the FlutterEngine has been run." 直接 abort
+  /// （Organizer 样本 / flutter/flutter#168535）。置位期间 finalizer 直接跳过这条消息。
+  /// 由 `sceneDidDisconnect` / `applicationWillTerminate` / `detachFromEngine` 置位，
+  /// `sceneDidBecomeActive` 复位（scene 重连说明引擎仍在正常运行）。
+  /// 注意：置位期间被释放的实例不会通知 Dart 移除强引用，Dart 侧 InstanceManager 会多留一个
+  /// wrapper；进程终止场景无影响，后台断连重连场景为可接受的小泄漏。
+  public static var isEngineTeardownImminent = false
+
   var proxyApiRegistrar: ProxyAPIRegistrar?
 
   init(binaryMessenger: FlutterBinaryMessenger) {
@@ -54,6 +65,8 @@ public class WebViewFlutterPlugin: NSObject, FlutterPlugin {
   }
 
   private func tearDownProxyAPIRegistrar() {
+    // Fix(kitar): 先标记引擎即将不可用，再拆 registrar；拆掉后迟到的 finalizer 消息也会被跳过。
+    WebViewFlutterPlugin.isEngineTeardownImminent = true
     proxyApiRegistrar?.ignoreCallsToDart = true
     proxyApiRegistrar?.tearDown()
     try? proxyApiRegistrar?.instanceManager.removeAllObjects()
@@ -69,12 +82,20 @@ public class WebViewFlutterPlugin: NSObject, FlutterPlugin {
     }
 
     public func sceneDidDisconnect(_: UIScene) {
+      // Fix(kitar): scene 断开后引擎随时可能进入 destroyContext，无论是否保留 registrar
+      // 都先标记 finalizer 保护；scene 重连时由 sceneDidBecomeActive 复位。
+      WebViewFlutterPlugin.isEngineTeardownImminent = true
       // Fix(kitar): 见 retainRegistrarOnSceneDisconnect。保护开启时保留 registrar，
       // 让仍在树上的 WebView 继续收 JSB；关闭时走上游拆解，便于远程回滚。
       guard !WebViewFlutterPlugin.retainRegistrarOnSceneDisconnect else {
         return
       }
       tearDownProxyAPIRegistrar()
+    }
+
+    public func sceneDidBecomeActive(_: UIScene) {
+      // Fix(kitar): scene 重连说明引擎仍在正常运行，恢复 finalizer 的 removeStrongReference。
+      WebViewFlutterPlugin.isEngineTeardownImminent = false
     }
   }
 #endif

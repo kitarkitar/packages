@@ -89,7 +89,76 @@ class WebViewFlutterPluginTests: XCTestCase {
       finalizer = nil
       waitForExpectations(timeout: 5.0)
     }
+
+    func testSceneDidDisconnectSetsTeardownImminentAndReconnectResets() {
+      // Fix(kitar): scene 断开后引擎随时可能进入 destroyContext，保护开启（保留 registrar）
+      // 时也必须停止 finalizer 的 removeStrongReference；scene 重连后恢复正常。
+      WebViewFlutterPlugin.retainRegistrarOnSceneDisconnect = true
+      WebViewFlutterPlugin.isEngineTeardownImminent = false
+      defer { WebViewFlutterPlugin.isEngineTeardownImminent = false }
+
+      let plugin = WebViewFlutterPlugin(binaryMessenger: TestBinaryMessenger())
+      plugin.proxyApiRegistrar!.setUp()
+
+      let scene = UIApplication.shared.connectedScenes.first!
+      (plugin as FlutterSceneLifeCycleDelegate).sceneDidDisconnect?(scene)
+
+      XCTAssertTrue(WebViewFlutterPlugin.isEngineTeardownImminent)
+      // 保留 registrar 的保护行为不受影响。
+      XCTAssertNotNil(plugin.proxyApiRegistrar)
+
+      (plugin as FlutterSceneLifeCycleDelegate).sceneDidBecomeActive?(scene)
+      XCTAssertFalse(WebViewFlutterPlugin.isEngineTeardownImminent)
+    }
+
+    func testFinalizerSkipsRemoveStrongReferenceWhenEngineTeardownImminent() {
+      // Fix(kitar): 引擎 teardown 置位期间，实例 dealloc 不再发送 removeStrongReference，
+      // 避免命中 FlutterEngine sendOnChannel 断言（flutter/flutter#168535）。
+      WebViewFlutterPlugin.isEngineTeardownImminent = false
+      defer { WebViewFlutterPlugin.isEngineTeardownImminent = false }
+
+      let messenger = RecordingBinaryMessenger()
+      let registrar = ProxyAPIRegistrar(binaryMessenger: messenger)
+
+      // 正常状态下实例 dealloc 会发送 removeStrongReference。
+      autoreleasepool {
+        var view: UIView? = UIView()
+        let identifier = registrar.instanceManager.addHostCreatedInstance(view!)
+        let removed: AnyObject? = try? registrar.instanceManager.removeInstance(
+          withIdentifier: identifier)
+        _ = removed
+        view = nil
+      }
+      XCTAssertEqual(messenger.sendCount, 1)
+
+      // 置位期间 dealloc 的实例必须跳过发送。
+      WebViewFlutterPlugin.isEngineTeardownImminent = true
+      autoreleasepool {
+        var view: UIView? = UIView()
+        let identifier = registrar.instanceManager.addHostCreatedInstance(view!)
+        let removed: AnyObject? = try? registrar.instanceManager.removeInstance(
+          withIdentifier: identifier)
+        _ = removed
+        view = nil
+      }
+      XCTAssertEqual(messenger.sendCount, 1)
+    }
   #endif
+}
+
+/// Fix(kitar): 记录 send 次数的 messenger，用于 finalizer 跳过发送的断言。
+private class RecordingBinaryMessenger: TestBinaryMessenger {
+  var sendCount = 0
+
+  override func send(onChannel channel: String, message: Data?) {
+    sendCount += 1
+  }
+
+  override func send(
+    onChannel channel: String, message: Data?, binaryReply: FlutterBinaryReply? = nil
+  ) {
+    sendCount += 1
+  }
 }
 
 class TestFinalizer {
